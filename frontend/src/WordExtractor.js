@@ -143,7 +143,7 @@ const WordExtractor = () => {
 
     function postQueryRequest({ id, querytext }) {
         return {
-            url: "http://127.0.0.1:8081/v1/job",
+            url: "http://jwordlist.com:8081/v1/job",
             data: {id, querytext}
         };
     }

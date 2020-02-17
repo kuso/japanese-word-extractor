@@ -6,6 +6,7 @@ require (
 	github.com/adjust/rmq v1.0.0
 	github.com/adjust/uniuri v0.0.0-20130923163420-498743145e60 // indirect
 	github.com/gin-contrib/cors v1.3.0
+	github.com/gin-contrib/gzip v0.0.1 // indirect
 	github.com/gin-gonic/contrib v0.0.0-20191209060500-d6e26eeaa607
 	github.com/gin-gonic/gin v1.5.0
 	github.com/gomodule/redigo v2.0.0+incompatible
