@@ -8,7 +8,7 @@ import (
 func main() {
 	// Set the router as the default one shipped with Gin
 	router := gin.Default()
-	r.Use(gzip.Gzip(gzip.DefaultCompression))
+	router.Use(gzip.Gzip(gzip.DefaultCompression))
 
 	// Serve frontend static files
 	//router.Use(static.Serve("/", static.LocalFile("./frontend/build", true)))
