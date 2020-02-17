@@ -25,4 +25,5 @@ func main() {
 
 	// Start and run the server
 	router.Run("jwordlist.com:80")
+
 }
