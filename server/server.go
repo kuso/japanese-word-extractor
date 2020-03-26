@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/adjust/rmq"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gomodule/redigo/redis"
@@ -27,30 +26,32 @@ const (
 func NewServer() *Server {
 	server := Server{}
 
-	server.Pool = &redis.Pool{
-		MaxIdle:   80,
-		MaxActive: 12000,
-		Dial: func() (redis.Conn, error) {
-			conn, err := redis.Dial("tcp", "localhost:6379")
-			if err != nil {
-				log.Printf("ERROR: fail to init redis: %v", err.Error())
-				os.Exit(1)
-			}
-			return conn, err
-		},
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			if time.Since(t) < time.Minute {
-				return nil
-			}
-			_, err := c.Do("PING")
-			return err
-		},
-	}
-	defer func() {
-		if err := server.Pool.Close(); err != nil {
-			panic(err)
+	/*
+		server.Pool = &redis.Pool{
+			MaxIdle:   80,
+			MaxActive: 12000,
+			Dial: func() (redis.Conn, error) {
+				conn, err := redis.Dial("tcp", "redis:6379")
+				if err != nil {
+					log.Printf("ERROR: fail to init redis: %v", err.Error())
+					os.Exit(1)
+				}
+				return conn, err
+			},
+			TestOnBorrow: func(c redis.Conn, t time.Time) error {
+				if time.Since(t) < time.Minute {
+					return nil
+				}
+				_, err := c.Do("PING")
+				return err
+			},
 		}
-	}()
+		defer func() {
+			if err := server.Pool.Close(); err != nil {
+				panic(err)
+			}
+		}()
+	*/
 
 	server.SetupRouter()
 
@@ -73,6 +74,12 @@ func NewServer() *Server {
 		panic(err)
 	}
 	server.JLPTDict = dict
+
+	edic2Dict, err := extractor.NewEdict2Dictionary()
+	if err != nil {
+		panic(err)
+	}
+	server.Edict2Dict = edic2Dict
 	return &server
 }
 
@@ -104,18 +111,18 @@ func (server *Server) SetupRouter() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	//server.Router.GET("/", server.Hello)
 	v1 := server.Router.Group("/v1")
 	{
 		v1.GET("/hello", server.Hello)
 		v1.POST("/job", server.NewJob)
-		v1.POST("/jobasync", server.NewJobAsync)
-		v1.GET("/job/:id", server.GetJobStatus)
+		//v1.POST("/jobasync", server.NewJobAsync)
+		//v1.GET("/job/:id", server.GetJobStatus)
 	}
 }
 
+/*
 func (server *Server) SetupMQ(service string, queue string) {
-	server.RmqConn = rmq.OpenConnection(service, "tcp", "localhost:6379", 1)
+	server.RmqConn = rmq.OpenConnection(service, "tcp", "127.0.0.1:6379", 1)
 	server.RmqQueue = server.RmqConn.OpenQueue(queue)
 	server.RmqQueue.StartConsuming(unackedLimit, 500*time.Millisecond)
 	for i := 0; i < numConsumers; i++ {
@@ -123,13 +130,14 @@ func (server *Server) SetupMQ(service string, queue string) {
 		server.RmqQueue.AddConsumer(name, NewConsumer(i, 1, server, server.StatusMonitor.ResultChan))
 	}
 }
+*/
 
 /*
 func initStore(server *Server) {
 	conn := server.Pool.Get()
 	defer conn.Close()
 }
- */
+*/
 
 func (server *Server) Set(key string, val string) error {
 	conn := server.Pool.Get()
@@ -156,7 +164,7 @@ func (server *Server) get(key string) (string, error) {
 }
 
 func (server *Server) Hello(c *gin.Context) {
-	result := gin.H{"hello": "world",}
+	result := gin.H{"hello": "world"}
 	c.JSON(http.StatusOK, result)
 }
 
@@ -164,31 +172,61 @@ func (server *Server) NewJob(c *gin.Context) {
 	var req JobRequest
 	err := c.ShouldBind(&req)
 	if err != nil {
-		c.AbortWithStatus(http.StatusBadGateway)
 		log.Println(err)
+		c.AbortWithStatus(http.StatusBadGateway)
 	}
 
 	result := Result{}
 	result.Id = shortuuid.New()
 	textSections := strings.Split(req.QueryText, "\n")
+	csvLines := strings.Builder{}
+	csvLines.WriteString("vocabulary, hiragana, meaning, JLPT level, word class\n")
+	words := map[string]int{}
 	for _, textSection := range textSections {
 		textSection = strings.TrimSpace(textSection)
 		if textSection == "" {
 			continue
 		}
-		tokens := extractor.GetTokens(textSection, server.JLPTDict)
+		tokens := extractor.GetTokens(textSection, server.JLPTDict, server.Edict2Dict)
 		section := Section{}
 		section.Tokens = tokens
+		for _, token := range tokens {
+			wordClass := token.Class
+			if !(wordClass == "名詞" || wordClass == "動詞") {
+				log.Println(token.DictForm + ", " + wordClass)
+				continue
+			}
+
+			if token.Level > 0 {
+				s := fmt.Sprintf("%s, %s, \"%s\", %v, %s\n", token.DictForm, token.DictFormHiragana, token.Meaning, token.Level, token.Class)
+				if words[s] == 1 {
+					continue
+				}
+				csvLines.WriteString(s)
+				words[s] = 1
+			} else {
+				s := fmt.Sprintf("%s, %s, \"%s\", , %s\n", token.DictForm, token.DictFormHiragana, token.Meaning, token.Class)
+				if words[s] == 1 {
+					continue
+				}
+				csvLines.WriteString(s)
+				words[s] = 1
+			}
+		}
 		result.Sections = append(result.Sections, &section)
+	}
+
+	if len(words) > 0 {
+		result.CSVData = csvLines.String()
+		log.Println(result.CSVData)
 	}
 
 	tmp, err := json.Marshal(result)
 	if err != nil {
-		c.AbortWithStatus(http.StatusBadGateway)
 		log.Println(err)
+		c.AbortWithStatus(http.StatusBadGateway)
 	}
 	jobStr := string(tmp)
-	log.Println(jobStr)
 	c.String(http.StatusOK, jobStr)
 	return
 }
@@ -233,7 +271,7 @@ func (server *Server) GetJobStatus(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		log.Println(err)
 	} else {
-		var result = JobResult{Id:id, Value:val}
+		var result = JobResult{Id: id, Value: val}
 		c.JSON(http.StatusOK, result)
 	}
 }

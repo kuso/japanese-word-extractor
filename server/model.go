@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/adjust/rmq"
 	"github.com/gin-gonic/gin"
+	"github.com/gojp/nihongo/lib/dictionary"
 	"github.com/gomodule/redigo/redis"
 	"github.com/kuso/japanese-word-extractor/extractor"
 	"net/http"
@@ -11,31 +12,32 @@ import (
 )
 
 type Server struct {
-	RmqConn    rmq.Connection
-	RmqQueue   rmq.Queue
-	Pool       *redis.Pool
-	Router     *gin.Engine
-	HttpServer *http.Server
+	RmqConn       rmq.Connection
+	RmqQueue      rmq.Queue
+	Pool          *redis.Pool
+	Router        *gin.Engine
+	HttpServer    *http.Server
 	StatusMonitor *StatusMonitor
-	JLPTDict  *extractor.JLPTDictionary
+	JLPTDict      *extractor.JLPTDictionary
+	Edict2Dict    *dictionary.Dictionary
 }
 
 type StatusMonitor struct {
 	sync.RWMutex
-	OKResults     map[string]int
-	ErrResults    map[string]int
-	Results       []Result
-	ResultChan    chan *Result
+	OKResults  map[string]int
+	ErrResults map[string]int
+	Results    []Result
+	ResultChan chan *Result
 }
 
 type JobRequest struct {
-	Id          string `json:"id"`
-	QueryText   string `json:"querytext"`
+	Id        string `json:"id"`
+	QueryText string `json:"querytext"`
 }
 
 type JobResult struct {
-	Id     string   `json:"id"`
-	Value  string   `json:"value"`
+	Id    string `json:"id"`
+	Value string `json:"value"`
 }
 
 type Section struct {
@@ -43,16 +45,16 @@ type Section struct {
 }
 
 type Result struct {
-	Id string `json:"id"`
-	Sections  []*Section `json:"sections"`
+	Id       string     `json:"id"`
+	Sections []*Section `json:"sections"`
+	CSVData  string     `json:"csvdata"`
 }
 
 type Consumer struct {
-	Server    *Server
-	Name      string
-	BatchSize int
-	Count     int
-	Before    time.Time
+	Server     *Server
+	Name       string
+	BatchSize  int
+	Count      int
+	Before     time.Time
 	ResultChan chan<- *Result
 }
-

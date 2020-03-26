@@ -3,10 +3,17 @@ package helper
 import (
 	"bufio"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 )
 
-func hira2kata (hira rune) rune {
+var (
+	_, b, _, _ = runtime.Caller(0)
+	Basepath   = filepath.Join(filepath.Dir(b), "../")
+)
+
+func hira2kata(hira rune) rune {
 	if (hira >= 'ぁ' && hira <= 'ゖ') || (hira >= 'ゝ' && hira <= 'ゞ') {
 		return hira + 0x60
 	}
@@ -17,7 +24,7 @@ func Hira2kata(hira string) string {
 	return strings.Map(hira2kata, hira)
 }
 
-func kata2hira (kata rune) rune {
+func kata2hira(kata rune) rune {
 	if (kata >= 'ァ' && kata <= 'ヶ') || (kata >= 'ヽ' && kata <= 'ヾ') {
 		return kata - 0x60
 	}
